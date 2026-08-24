@@ -1,0 +1,53 @@
+name: Refresh prices
+
+on:
+  schedule:
+    # 09:15 UTC = about 2:15am Pacific. Off the hour on purpose:
+    # GitHub queues a lot of jobs exactly on the hour and they get delayed.
+    - cron: "15 9 * * *"
+  workflow_dispatch: {}   # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: prices
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Pull prices from TCGCSV
+        run: node scripts/build-prices.mjs
+
+      - name: Add CORS headers for the published files
+        run: |
+          cat > docs/_headers <<'EOF'
+          /*
+            Access-Control-Allow-Origin: *
+          EOF
+          # GitHub Pages already sends Access-Control-Allow-Origin: *,
+          # this file is here so the same folder works on Netlify or Cloudflare too.
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
